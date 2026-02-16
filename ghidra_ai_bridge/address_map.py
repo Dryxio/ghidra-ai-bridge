@@ -9,10 +9,23 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ghidra_ai_bridge.config import Config
+
+
+def _compile_patterns(patterns: list[str], label: str) -> list[re.Pattern]:
+    """Compile regex patterns, printing a clear error for invalid ones."""
+    compiled = []
+    for p in patterns:
+        try:
+            compiled.append(re.compile(p))
+        except re.error as exc:
+            print(f"ERROR: Invalid {label} pattern: {p!r}", file=sys.stderr)
+            print(f"       {exc}", file=sys.stderr)
+    return compiled
 
 
 def extract_addresses(cfg: Config) -> dict:
@@ -23,6 +36,17 @@ def extract_addresses(cfg: Config) -> dict:
     if not source_root or not os.path.isdir(source_root):
         print(f"ERROR: Source root not found: {source_root}")
         return address_map
+
+    hook_re = _compile_patterns(cfg.hook_patterns, "hook_patterns")
+    stub_re = _compile_patterns(cfg.stub_patterns, "stub_patterns")
+
+    class_re = None
+    if cfg.class_macro:
+        try:
+            class_re = re.compile(cfg.class_macro)
+        except re.error as exc:
+            print(f"ERROR: Invalid class_macro pattern: {cfg.class_macro!r}", file=sys.stderr)
+            print(f"       {exc}", file=sys.stderr)
 
     for root, dirs, files in os.walk(source_root):
         for filename in files:
@@ -44,14 +68,14 @@ def extract_addresses(cfg: Config) -> dict:
                 content = f.read()
 
             # Find class name from class macro
-            if cfg.class_macro:
-                class_match = re.search(cfg.class_macro, content)
+            if class_re:
+                class_match = class_re.search(content)
                 if class_match:
                     class_name = class_match.group(1)
 
             # Extract hook registrations (name, address patterns)
-            for pattern in cfg.hook_patterns:
-                for match in re.finditer(pattern, content):
+            for pat in hook_re:
+                for match in pat.finditer(content):
                     func_name = match.group(1)
                     address = match.group(2).lower()
 
@@ -67,8 +91,8 @@ def extract_addresses(cfg: Config) -> dict:
                         }
 
             # Extract stub addresses (unreversed functions)
-            for pattern in cfg.stub_patterns:
-                for match in re.finditer(pattern, content):
+            for pat in stub_re:
+                for match in pat.finditer(content):
                     address = match.group(1).lower()
                     addr_int = int(address, 16)
                     addr_norm = f"{addr_int:08x}"

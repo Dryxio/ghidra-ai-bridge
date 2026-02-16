@@ -877,13 +877,15 @@ def _scan_remaining_stubs_live(cfg: Config):
 
     source_root = Path(cfg.source_root)
     stubs = []
+    seen_files: set[Path] = set()
 
     for ext in cfg.file_extensions:
-        if ext != '.cpp':
-            continue
-        for cpp_file in source_root.rglob(f"*{ext}"):
+        for src_file in source_root.rglob(f"*{ext}"):
+            if src_file in seen_files:
+                continue
+            seen_files.add(src_file)
             try:
-                content = cpp_file.read_text(errors='ignore')
+                content = src_file.read_text(errors='ignore')
                 for stub_pattern in cfg.stub_patterns:
                     for match in re.finditer(stub_pattern, content):
                         addr = match.group(1) if match.lastindex else "unknown"
@@ -898,9 +900,9 @@ def _scan_remaining_stubs_live(cfg: Config):
                         func_name = func_match.group(1) if func_match else "unknown"
 
                         try:
-                            rel_file = str(cpp_file.relative_to(source_root))
+                            rel_file = str(src_file.relative_to(source_root))
                         except ValueError:
-                            rel_file = str(cpp_file)
+                            rel_file = str(src_file)
 
                         stubs.append({
                             "function": func_name,

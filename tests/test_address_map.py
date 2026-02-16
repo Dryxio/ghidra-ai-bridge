@@ -125,3 +125,25 @@ def test_empty_source():
     cfg = Config(source_root="/nonexistent/path")
     result = extract_addresses(cfg)
     assert result == {}
+
+
+def test_invalid_regex_no_traceback(capsys, tmp_path):
+    """Invalid regex in config should print clean error, not traceback."""
+    (tmp_path / "Foo.cpp").write_text("HOOK(Bar, 0x401000);\n")
+
+    cfg = Config(
+        source_root=str(tmp_path),
+        hook_patterns=["(unclosed_group"],  # invalid regex
+        stub_patterns=["[bad_bracket"],     # invalid regex
+        class_macro="(also_broken",         # invalid regex
+    )
+    result = extract_addresses(cfg)
+
+    # Should still return (empty map, since patterns didn't compile)
+    assert isinstance(result, dict)
+
+    # Should have printed clean error messages to stderr
+    captured = capsys.readouterr()
+    assert "Invalid hook_patterns pattern" in captured.err
+    assert "Invalid stub_patterns pattern" in captured.err
+    assert "Invalid class_macro pattern" in captured.err
