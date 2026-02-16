@@ -31,11 +31,26 @@ def load_json(filepath: str, default=None):
 
 
 def normalize_address(addr: str) -> str:
-    """Normalize address to 8-char lowercase hex."""
+    """Normalize address to 8-char lowercase hex.
+
+    Handles plain hex (``401000``), ``0x`` prefix (``0x401000``),
+    and Ghidra segmented format (``ram:00401000``, ``CODE:00401000``).
+    """
     addr = addr.strip().lower()
+    # Strip Ghidra segment prefix (e.g. "ram:", "code:", "mem:")
+    if ":" in addr:
+        addr = addr.rsplit(":", 1)[1]
     if addr.startswith("0x"):
         addr = addr[2:]
     return addr.zfill(8)
+
+
+def _addr_sort_key(addr: str) -> int:
+    """Convert address string to int for sorting, handling segmented formats."""
+    try:
+        return int(normalize_address(addr), 16)
+    except ValueError:
+        return 0
 
 
 # ---------------------------------------------------------------------------
@@ -534,12 +549,13 @@ def cmd_decompile_class(class_name: str, cfg: Config) -> int:
     print(f"// Methods: {len(methods)}")
     print(f"// ===========================================\n")
 
-    methods.sort(key=lambda x: int(x[0], 16))
+    methods.sort(key=lambda x: _addr_sort_key(x[0]))
 
     for addr, info in methods:
-        print(f"// --- {info['full_name']} @ 0x{addr} ---")
+        addr_norm = normalize_address(addr)
+        print(f"// --- {info['full_name']} @ 0x{addr_norm} ---")
 
-        filepath = os.path.join(cfg.export_dir, f"{addr.zfill(8)}.json")
+        filepath = os.path.join(cfg.export_dir, f"{addr_norm}.json")
         if os.path.exists(filepath):
             with open(filepath, "r") as f:
                 data = json.load(f)

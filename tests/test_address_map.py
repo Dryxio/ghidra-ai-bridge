@@ -7,7 +7,7 @@ import tempfile
 import pytest
 
 from ghidra_ai_bridge.config import Config
-from ghidra_ai_bridge.address_map import extract_addresses
+from ghidra_ai_bridge.address_map import extract_addresses, build_address_map
 from ghidra_ai_bridge.patterns.defaults import PRESETS
 
 
@@ -38,8 +38,9 @@ void CMyClass::InjectHooks() {
             hook_patterns=_PLUGIN_SDK["hook_patterns"],
             class_macro=_PLUGIN_SDK["class_macro"],
         )
-        result = extract_addresses(cfg)
+        result, had_errors = extract_addresses(cfg)
 
+        assert not had_errors
         assert "00401000" in result
         assert result["00401000"]["name"] == "DoThing"
         assert result["00401000"]["class"] == "CMyClass"
@@ -62,8 +63,9 @@ void CStubClass::Unfinished() {
             source_root=tmpdir,
             stub_patterns=_PLUGIN_SDK["stub_patterns"],
         )
-        result = extract_addresses(cfg)
+        result, had_errors = extract_addresses(cfg)
 
+        assert not had_errors
         assert "00402000" in result
         assert result["00402000"]["stub"] is True
 
@@ -84,8 +86,9 @@ void CActualClass::InjectHooks() {
             hook_patterns=_PLUGIN_SDK["hook_patterns"],
             class_macro=_PLUGIN_SDK["class_macro"],
         )
-        result = extract_addresses(cfg)
+        result, had_errors = extract_addresses(cfg)
 
+        assert not had_errors
         assert result["00403000"]["class"] == "CActualClass"
 
 
@@ -101,8 +104,9 @@ CUSTOM_HOOK(MyFunc, 0x500000);
             hook_patterns=[r'CUSTOM_HOOK\s*\(\s*(\w+)\s*,\s*(0x[0-9A-Fa-f]+)'],
             stub_patterns=[],
         )
-        result = extract_addresses(cfg)
+        result, had_errors = extract_addresses(cfg)
 
+        assert not had_errors
         assert "00500000" in result
         assert result["00500000"]["name"] == "MyFunc"
 
@@ -115,15 +119,17 @@ RH_ScopedInstall(DoThing, 0x401000);
 """)
 
         cfg = Config(source_root=tmpdir)  # Empty patterns by default
-        result = extract_addresses(cfg)
+        result, had_errors = extract_addresses(cfg)
 
+        assert not had_errors
         assert result == {}
 
 
 def test_empty_source():
     """Should return empty map for non-existent source root."""
     cfg = Config(source_root="/nonexistent/path")
-    result = extract_addresses(cfg)
+    result, had_errors = extract_addresses(cfg)
+    assert not had_errors
     assert result == {}
 
 
@@ -137,9 +143,12 @@ def test_invalid_regex_no_traceback(capsys, tmp_path):
         stub_patterns=["[bad_bracket"],     # invalid regex
         class_macro="(also_broken",         # invalid regex
     )
-    result = extract_addresses(cfg)
+    result, had_errors = extract_addresses(cfg)
 
-    # Should still return (empty map, since patterns didn't compile)
+    # Should report pattern errors
+    assert had_errors is True
+
+    # Should still return a dict (empty, since patterns didn't compile)
     assert isinstance(result, dict)
 
     # Should have printed clean error messages to stderr
@@ -147,3 +156,29 @@ def test_invalid_regex_no_traceback(capsys, tmp_path):
     assert "Invalid hook_patterns pattern" in captured.err
     assert "Invalid stub_patterns pattern" in captured.err
     assert "Invalid class_macro pattern" in captured.err
+
+
+def test_build_map_returns_nonzero_on_bad_patterns(capsys, tmp_path):
+    """build_address_map should return 1 when patterns fail to compile."""
+    (tmp_path / "Foo.cpp").write_text("HOOK(Bar, 0x401000);\n")
+
+    cfg = Config(
+        source_root=str(tmp_path),
+        address_map_path=str(tmp_path / "address_map.json"),
+        hook_patterns=["(unclosed"],  # invalid regex
+    )
+    ret = build_address_map(cfg)
+    assert ret == 1
+
+
+def test_build_map_returns_zero_on_valid_patterns(tmp_path):
+    """build_address_map should return 0 when patterns are valid (even if no matches)."""
+    (tmp_path / "Foo.cpp").write_text("nothing here\n")
+
+    cfg = Config(
+        source_root=str(tmp_path),
+        address_map_path=str(tmp_path / "address_map.json"),
+        hook_patterns=[r'HOOK\(\s*(\w+)\s*,\s*(0x[0-9A-Fa-f]+)\)'],
+    )
+    ret = build_address_map(cfg)
+    assert ret == 0

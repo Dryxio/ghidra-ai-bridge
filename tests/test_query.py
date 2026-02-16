@@ -51,6 +51,14 @@ def test_normalize_address():
     assert normalize_address("0") == "00000000"
 
 
+def test_normalize_address_segmented():
+    """Should handle Ghidra segmented address formats like ram:00401000."""
+    assert normalize_address("ram:00401000") == "00401000"
+    assert normalize_address("CODE:00500000") == "00500000"
+    assert normalize_address("mem:0x401000") == "00401000"
+    assert normalize_address("ram:401000") == "00401000"
+
+
 def test_load_json_missing():
     result = load_json("/nonexistent/path.json")
     assert result == {}
@@ -240,3 +248,28 @@ def test_cmd_remaining_no_source(capsys):
         assert ret == 0
         out = capsys.readouterr().out
         assert "42" in out
+
+
+# ---------------------------------------------------------------------------
+# Segmented address handling in decompile-class
+# ---------------------------------------------------------------------------
+
+def test_cmd_decompile_class_segmented_index(capsys):
+    """decompile-class should handle segmented addresses from Ghidra index."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cfg = _make_exports(
+            tmpdir,
+            functions={
+                "00601000": {
+                    "address": "00601000", "name": "CAlpha::Method",
+                    "decompiled": "void method() {}", "signature": "void()",
+                },
+            },
+            # Ghidra index uses segmented address format
+            index={"ram:00601000": {"name": "CAlpha::Method", "address": "ram:00601000"}},
+            address_map={},
+        )
+        ret = cmd_decompile_class("CAlpha", cfg)
+        assert ret == 0
+        out = capsys.readouterr().out
+        assert "CAlpha::Method" in out
