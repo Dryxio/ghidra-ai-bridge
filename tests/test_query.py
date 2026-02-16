@@ -273,3 +273,32 @@ def test_cmd_decompile_class_segmented_index(capsys):
         assert ret == 0
         out = capsys.readouterr().out
         assert "CAlpha::Method" in out
+
+
+def test_cmd_decompile_class_segmented_safe_filename(capsys):
+    """decompile-class should find ram_00601000.json files from segmented exports."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Exporter writes segmented-safe filenames: ram_00601000.json
+        func_data = {
+            "address": "ram:00601000", "name": "CBeta::Run",
+            "decompiled": "void run() { return; }", "signature": "void()",
+        }
+        with open(os.path.join(tmpdir, "ram_00601000.json"), "w") as f:
+            json.dump(func_data, f)
+
+        map_path = os.path.join(tmpdir, "address_map.json")
+        with open(map_path, "w") as f:
+            json.dump({}, f)
+
+        # Index uses segmented keys (matching exporter)
+        index_path = os.path.join(tmpdir, "_index.json")
+        with open(index_path, "w") as f:
+            json.dump({"ram:00601000": {"name": "CBeta::Run", "address": "ram:00601000"}}, f)
+
+        cfg = Config(export_dir=tmpdir, address_map_path=map_path)
+        ret = cmd_decompile_class("CBeta", cfg)
+        assert ret == 0
+        out = capsys.readouterr().out
+        assert "CBeta::Run" in out
+        assert "void run()" in out  # Should show decompiled body, not "// (not exported)"
+        assert "(not exported)" not in out

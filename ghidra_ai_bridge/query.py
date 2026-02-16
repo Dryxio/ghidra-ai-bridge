@@ -555,7 +555,12 @@ def cmd_decompile_class(class_name: str, cfg: Config) -> int:
         addr_norm = normalize_address(addr)
         print(f"// --- {info['full_name']} @ 0x{addr_norm} ---")
 
+        # Try normalized filename first, then segmented-safe (ram_00601000.json)
         filepath = os.path.join(cfg.export_dir, f"{addr_norm}.json")
+        if not os.path.exists(filepath):
+            safe_addr = addr.replace(":", "_")
+            filepath = os.path.join(cfg.export_dir, f"{safe_addr}.json")
+
         if os.path.exists(filepath):
             with open(filepath, "r") as f:
                 data = json.load(f)
