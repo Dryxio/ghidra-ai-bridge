@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ghidra-ai-bridge"
+version = "0.1.0"
+description = "AI-powered Ghidra query interface for reverse engineering agents"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+headless = ["pyghidra>=1.0"]
+
+[project.scripts]
+ghidra-bridge = "ghidra_ai_bridge.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/user/ghidra-ai-bridge"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ghidra_ai_bridge"]

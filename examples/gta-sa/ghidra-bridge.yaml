@@ -1,0 +1,33 @@
+# Example ghidra-bridge config for GTA San Andreas reverse engineering project
+# Copy this file to your project root and adjust paths.
+
+ghidra:
+  install_dir: ~/Downloads/ghidra_12.0.1_PUBLIC
+  project_dir: ~/Documents/Ghidra
+  project_name: gta-reversed
+  program_name: gta_sa_compact.exe
+
+paths:
+  export_dir: ~/ghidra-exports
+  address_map: ~/ghidra-tools/address_map.json
+
+source:
+  root: ~/Documents/GitHub/gta-reversed-dryxio/source/game_sa
+  hook_patterns:
+    - 'RH_ScopedInstall\s*\(\s*(\w+)\s*,\s*(0x[0-9A-Fa-f]+)'
+    - 'RH_ScopedVMTInstall\s*\(\s*(\w+)\s*,\s*(0x[0-9A-Fa-f]+)'
+  stub_patterns:
+    - 'plugin::Call\w*<[^>]*(0x[0-9A-Fa-f]+)[^>]*>'
+  class_macro: 'RH_ScopedClass\s*\(\s*(\w+)\s*\)'
+  validate_size_macro: 'VALIDATE_SIZE\s*\(\s*(\w+)\s*,\s*(0x[0-9A-Fa-f]+|\d+)\s*\)'
+  validate_offset_macro: 'VALIDATE_OFFSET\s*\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(0x[0-9A-Fa-f]+|\d+)\s*\)'
+  stub_markers:
+    - NOTSA_UNREACHABLE
+  file_extensions:
+    - .cpp
+    - .h
+    - .hpp
+
+binary:
+  code_range_min: 0x00401000
+  code_range_max: 0x00900000
