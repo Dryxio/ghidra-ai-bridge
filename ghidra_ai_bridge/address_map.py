@@ -28,14 +28,17 @@ def extract_addresses(cfg: Config) -> dict:
         for filename in files:
             if not any(filename.endswith(ext) for ext in cfg.file_extensions):
                 continue
-            if not filename.endswith('.cpp'):
-                continue
 
             filepath = os.path.join(root, filename)
             rel_path = os.path.relpath(filepath, source_root)
 
-            # Default class name from filename
-            class_name = filename.replace('.cpp', '')
+            # Default class name from filename (strip any extension)
+            base = filename
+            for ext in cfg.file_extensions:
+                if base.endswith(ext):
+                    base = base[:-len(ext)]
+                    break
+            class_name = base
 
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read()

@@ -123,38 +123,43 @@ def find_stubs(cfg: Config) -> list[dict]:
     """Find all remaining stub function calls in source."""
     source_root = Path(cfg.source_root)
     stubs = []
+    seen_files: set[Path] = set()
 
-    for cpp_file in source_root.rglob("*.cpp"):
-        try:
-            content = cpp_file.read_text(errors='ignore')
+    for ext in cfg.file_extensions:
+        for src_file in source_root.rglob(f"*{ext}"):
+            if src_file in seen_files:
+                continue
+            seen_files.add(src_file)
+            try:
+                content = src_file.read_text(errors='ignore')
 
-            for stub_pattern in cfg.stub_patterns:
-                for match in re.finditer(stub_pattern + r'[^;]*;', content):
-                    start = max(0, match.start() - 500)
-                    context = content[start:match.start()]
+                for stub_pattern in cfg.stub_patterns:
+                    for match in re.finditer(stub_pattern + r'[^;]*;', content):
+                        start = max(0, match.start() - 500)
+                        context = content[start:match.start()]
 
-                    func_match = re.search(
-                        r'(\w+::\w+)\s*\([^)]*\)\s*(?:const\s*)?\{[^}]*$',
-                        context, re.DOTALL,
-                    )
-                    func_name = func_match.group(1) if func_match else "unknown"
+                        func_match = re.search(
+                            r'(\w+::\w+)\s*\([^)]*\)\s*(?:const\s*)?\{[^}]*$',
+                            context, re.DOTALL,
+                        )
+                        func_name = func_match.group(1) if func_match else "unknown"
 
-                    addr_match = re.search(r'(0x[0-9A-Fa-f]+)', match.group(0))
-                    addr = addr_match.group(1) if addr_match else "unknown"
+                        addr_match = re.search(r'(0x[0-9A-Fa-f]+)', match.group(0))
+                        addr = addr_match.group(1) if addr_match else "unknown"
 
-                    try:
-                        rel = str(cpp_file.relative_to(source_root))
-                    except ValueError:
-                        rel = str(cpp_file)
+                        try:
+                            rel = str(src_file.relative_to(source_root))
+                        except ValueError:
+                            rel = str(src_file)
 
-                    stubs.append({
-                        "function": func_name,
-                        "address": addr,
-                        "file": rel,
-                        "stub": match.group(0)[:100],
-                    })
-        except Exception:
-            pass
+                        stubs.append({
+                            "function": func_name,
+                            "address": addr,
+                            "file": rel,
+                            "stub": match.group(0)[:100],
+                        })
+            except Exception:
+                pass
 
     return stubs
 
@@ -180,8 +185,6 @@ def export_source_types(cfg: Config) -> int:
     header_count = 0
 
     for ext in cfg.file_extensions:
-        if ext not in ('.h', '.hpp'):
-            continue
         for header in source_root.rglob(f"*{ext}"):
             try:
                 content = header.read_text(errors='ignore')

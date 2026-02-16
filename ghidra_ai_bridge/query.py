@@ -156,11 +156,14 @@ def cmd_decompile(target: str, cfg: Config) -> int:
 
 
 def cmd_search(pattern: str, cfg: Config) -> int:
-    """Search for functions by name."""
+    """Search for functions by name (address map + Ghidra index)."""
     address_map = _load_address_map(cfg)
+    index = _load_index(cfg)
     pattern_lower = pattern.lower()
     matches = []
+    seen_addrs: set[str] = set()
 
+    # 1. Search address map (has richer metadata)
     for addr, info in address_map.items():
         full_name = info.get("full_name", "")
         name = info.get("name", "")
@@ -170,6 +173,17 @@ def cmd_search(pattern: str, cfg: Config) -> int:
             pattern_lower in name.lower() or
             pattern_lower in class_name.lower()):
             matches.append((addr, full_name, info.get("file", "")))
+            seen_addrs.add(normalize_address(addr))
+
+    # 2. Fallback: search Ghidra index for functions not in address map
+    for addr, info in index.items():
+        addr_norm = normalize_address(addr)
+        if addr_norm in seen_addrs:
+            continue
+        name = info.get("name", "")
+        if pattern_lower in name.lower():
+            matches.append((addr, name, ""))
+            seen_addrs.add(addr_norm)
 
     if not matches:
         print(f"No functions matching '{pattern}'")
@@ -486,14 +500,29 @@ def cmd_strings(pattern: str, cfg: Config) -> int:
 
 
 def cmd_decompile_class(class_name: str, cfg: Config) -> int:
-    """Decompile all methods of a class."""
+    """Decompile all methods of a class (address map + Ghidra index)."""
     address_map = _load_address_map(cfg)
+    index = _load_index(cfg)
     class_lower = class_name.lower()
 
     methods = []
+    seen_addrs: set[str] = set()
+
+    # 1. Search address map
     for addr, info in address_map.items():
         if info.get("class", "").lower() == class_lower:
             methods.append((addr, info))
+            seen_addrs.add(normalize_address(addr))
+
+    # 2. Fallback: search Ghidra index by name prefix (e.g. "CMyClass::")
+    for addr, info in index.items():
+        addr_norm = normalize_address(addr)
+        if addr_norm in seen_addrs:
+            continue
+        name = info.get("name", "")
+        if name.lower().startswith(class_lower + "::"):
+            methods.append((addr, {"full_name": name, "class": class_name}))
+            seen_addrs.add(addr_norm)
 
     if not methods:
         print(f"ERROR: No methods found for class: {class_name}")
